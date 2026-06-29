@@ -73,6 +73,25 @@ public sealed class CommissionRequestConfiguration : IEntityTypeConfiguration<Co
             x.Property(p => p.Phone).HasColumnName("customer_phone").HasMaxLength(40).IsRequired();
         });
 
+        b.HasMany(c => c.ReferenceImages)
+            .WithOne()
+            .HasForeignKey(i => i.CommissionRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Metadata.FindNavigation(nameof(CommissionRequest.ReferenceImages))!
+            .SetPropertyAccessMode(PropertyAccessMode.Field);
+
         b.HasIndex(c => c.Status);
+    }
+}
+
+public sealed class CommissionReferenceImageConfiguration : IEntityTypeConfiguration<CommissionReferenceImage>
+{
+    public void Configure(EntityTypeBuilder<CommissionReferenceImage> b)
+    {
+        b.ToTable("commission_reference_images");
+        b.HasKey(i => i.Id);
+        b.Property(i => i.StorageKey).HasMaxLength(400).IsRequired();
+        b.Property(i => i.Url).HasMaxLength(600).IsRequired();
+        b.HasIndex(i => i.CommissionRequestId);
     }
 }

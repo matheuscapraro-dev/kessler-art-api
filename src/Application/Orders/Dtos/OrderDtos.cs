@@ -37,6 +37,8 @@ public sealed record OrderSummaryDto(
 
 // ── Encomendas sob medida ────────────────────────────────────────────
 
+public sealed record CommissionImageDto(Guid Id, string Url);
+
 public sealed record CommissionDto(
     Guid Id,
     string Code,
@@ -52,7 +54,8 @@ public sealed record CommissionDto(
     decimal? QuotedPrice,
     CommissionStatus Status,
     string? AdminNotes,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    IReadOnlyList<CommissionImageDto> ReferenceImages);
 
 public sealed record CommissionSummaryDto(
     Guid Id,

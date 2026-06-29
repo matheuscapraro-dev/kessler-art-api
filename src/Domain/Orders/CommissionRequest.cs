@@ -2,12 +2,17 @@ using Kessler.Domain.Common;
 
 namespace Kessler.Domain.Orders;
 
+/// <summary>Dados de uma imagem de referência já enviada ao storage.</summary>
+public sealed record CommissionReference(string StorageKey, string Url);
+
 /// <summary>
 /// Encomenda sob medida solicitada por um convidado. O atendimento e o orçamento
 /// acontecem manualmente (WhatsApp); aqui guardamos o briefing e o ciclo de vida.
 /// </summary>
 public sealed class CommissionRequest : AuditableEntity
 {
+    private readonly List<CommissionReferenceImage> _referenceImages = [];
+
     public string Code { get; private set; } = null!;
     public CustomerInfo Customer { get; private set; } = null!;
 
@@ -24,6 +29,8 @@ public sealed class CommissionRequest : AuditableEntity
     public CommissionStatus Status { get; private set; }
     public string? AdminNotes { get; private set; }
 
+    public IReadOnlyList<CommissionReferenceImage> ReferenceImages => _referenceImages.AsReadOnly();
+
     private CommissionRequest() { } // EF Core
 
     public static CommissionRequest Create(
@@ -33,9 +40,10 @@ public sealed class CommissionRequest : AuditableEntity
         string? colors = null,
         string? size = null,
         DateTime? desiredDeadline = null,
-        string? referenceProductSlug = null)
+        string? referenceProductSlug = null,
+        IEnumerable<CommissionReference>? referenceImages = null)
     {
-        return new CommissionRequest
+        var commission = new CommissionRequest
         {
             Id = Guid.NewGuid(),
             Code = ReferenceCode.New("ENC"),
@@ -48,6 +56,11 @@ public sealed class CommissionRequest : AuditableEntity
             ReferenceProductSlug = Normalize(referenceProductSlug),
             Status = CommissionStatus.Nova
         };
+
+        foreach (var img in referenceImages ?? [])
+            commission._referenceImages.Add(CommissionReferenceImage.Create(img.StorageKey, img.Url));
+
+        return commission;
     }
 
     public void SendQuote(decimal price)

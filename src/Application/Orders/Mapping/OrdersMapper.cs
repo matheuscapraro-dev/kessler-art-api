@@ -51,7 +51,8 @@ public static class OrdersMapper
         c.QuotedPrice,
         c.Status,
         c.AdminNotes,
-        c.CreatedAt);
+        c.CreatedAt,
+        c.ReferenceImages.Select(i => new CommissionImageDto(i.Id, i.Url)).ToList());
 
     public static CommissionSummaryDto ToSummary(CommissionRequest c) => new(
         c.Id,

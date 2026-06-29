@@ -9,6 +9,8 @@ using MediatR;
 
 namespace Kessler.Application.Orders.Commands.CreateCommission;
 
+public sealed record CommissionReferenceInput(string StorageKey, string Url);
+
 public sealed record CreateCommissionCommand(
     string CustomerName,
     string CustomerEmail,
@@ -18,14 +20,17 @@ public sealed record CreateCommissionCommand(
     string? Colors,
     string? Size,
     DateTime? DesiredDeadline,
-    string? ReferenceProductSlug) : IRequest<Result<CommissionDto>>;
+    string? ReferenceProductSlug,
+    IReadOnlyList<CommissionReferenceInput>? ReferenceImages = null) : IRequest<Result<CommissionDto>>;
 
 public sealed class CreateCommissionCommandValidator : AbstractValidator<CreateCommissionCommand>
 {
     public CreateCommissionCommandValidator()
     {
         RuleFor(x => x.CustomerName).NotEmpty().MaximumLength(160);
-        RuleFor(x => x.CustomerEmail).NotEmpty().EmailAddress();
+        // E-mail opcional (admin pode cadastrar pedido por telefone) — valida o formato só se preenchido.
+        RuleFor(x => x.CustomerEmail).EmailAddress()
+            .When(x => !string.IsNullOrWhiteSpace(x.CustomerEmail));
         RuleFor(x => x.CustomerPhone).NotEmpty().MaximumLength(40);
         RuleFor(x => x.Description)
             .NotEmpty().WithMessage("Conte o que você gostaria de encomendar.")
@@ -43,6 +48,9 @@ internal sealed class CreateCommissionCommandHandler(
     public async Task<Result<CommissionDto>> Handle(CreateCommissionCommand request, CancellationToken cancellationToken)
     {
         var customer = CustomerInfo.Create(request.CustomerName, request.CustomerEmail, request.CustomerPhone);
+        var references = request.ReferenceImages?
+            .Select(r => new CommissionReference(r.StorageKey, r.Url));
+
         var commission = CommissionRequest.Create(
             customer,
             request.Description,
@@ -50,7 +58,8 @@ internal sealed class CreateCommissionCommandHandler(
             request.Colors,
             request.Size,
             request.DesiredDeadline,
-            request.ReferenceProductSlug);
+            request.ReferenceProductSlug,
+            references);
 
         commissions.Add(commission);
         await unitOfWork.SaveChangesAsync(cancellationToken);

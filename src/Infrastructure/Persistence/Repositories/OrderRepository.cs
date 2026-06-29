@@ -30,10 +30,11 @@ internal sealed class CommissionRepository(KesslerDbContext db) : ICommissionRep
     public void Add(CommissionRequest commission) => db.Commissions.Add(commission);
 
     public Task<CommissionRequest?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        db.Commissions.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+        db.Commissions.Include(c => c.ReferenceImages).FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
 
     public Task<CommissionRequest?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
-        db.Commissions.AsNoTracking().FirstOrDefaultAsync(c => c.Code == code, cancellationToken);
+        db.Commissions.AsNoTracking().Include(c => c.ReferenceImages)
+            .FirstOrDefaultAsync(c => c.Code == code, cancellationToken);
 
     public async Task<IReadOnlyList<CommissionRequest>> ListAsync(CommissionStatus? status, CancellationToken cancellationToken = default)
     {

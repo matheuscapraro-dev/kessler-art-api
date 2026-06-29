@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Kessler.Web.Api</RootNamespace>
-    <AssemblyName>Kessler.Web.Api</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

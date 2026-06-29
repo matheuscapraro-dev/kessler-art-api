@@ -13,7 +13,7 @@ public sealed record CommissionReferenceInput(string StorageKey, string Url);
 
 public sealed record CreateCommissionCommand(
     string CustomerName,
-    string CustomerEmail,
+    string? CustomerEmail,
     string CustomerPhone,
     string Description,
     string? DesiredCategory,
@@ -47,7 +47,7 @@ internal sealed class CreateCommissionCommandHandler(
 {
     public async Task<Result<CommissionDto>> Handle(CreateCommissionCommand request, CancellationToken cancellationToken)
     {
-        var customer = CustomerInfo.Create(request.CustomerName, request.CustomerEmail, request.CustomerPhone);
+        var customer = CustomerInfo.Create(request.CustomerName, request.CustomerEmail ?? "", request.CustomerPhone);
         var references = request.ReferenceImages?
             .Select(r => new CommissionReference(r.StorageKey, r.Url));
 

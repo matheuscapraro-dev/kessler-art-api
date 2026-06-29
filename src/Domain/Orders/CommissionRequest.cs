@@ -44,7 +44,7 @@ public sealed class CommissionRequest : AuditableEntity
             DesiredCategory = Normalize(desiredCategory),
             Colors = Normalize(colors),
             Size = Normalize(size),
-            DesiredDeadline = desiredDeadline,
+            DesiredDeadline = NormalizeToUtc(desiredDeadline),
             ReferenceProductSlug = Normalize(referenceProductSlug),
             Status = CommissionStatus.Nova
         };
@@ -62,4 +62,16 @@ public sealed class CommissionRequest : AuditableEntity
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Postgres (timestamptz) exige DateTime UTC. Datas vindas de &lt;input type="date"&gt;
+    /// chegam com Kind=Unspecified — tratamos como UTC.
+    /// </summary>
+    private static DateTime? NormalizeToUtc(DateTime? value) => value?.Kind switch
+    {
+        null => null,
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.Value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+    };
 }

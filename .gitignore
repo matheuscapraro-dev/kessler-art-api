@@ -1,0 +1,22 @@
+# .NET build
+[Bb]in/
+[Oo]bj/
+*.user
+publish/
+publish_temp/
+efbundle
+*.log
+
+# Secrets / runtime
+.env
+.env.*
+!.env.example
+appsettings.Production.json
+uploads/
+dataprotection-keys/
+
+# IDE
+.vs/
+.idea/
+.DS_Store
+Thumbs.db

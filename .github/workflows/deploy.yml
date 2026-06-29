@@ -1,0 +1,195 @@
+name: Deploy API to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  build-and-deploy:
+    name: Build, Test & Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - run: dotnet restore
+
+      - run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: Generate EF migration bundle
+        run: |
+          dotnet new tool-manifest --force
+          dotnet tool install dotnet-ef
+          dotnet tool run dotnet-ef migrations bundle \
+            --project src/Infrastructure/Infrastructure.csproj \
+            --startup-project src/Web.Api/Web.Api.csproj \
+            --configuration Release \
+            --output ./efbundle \
+            --self-contained \
+            --target-runtime linux-x64 \
+            --force
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          ConnectionStrings__Default: "Host=localhost;Database=dummy;Username=dummy;Password=dummy"
+
+      - name: Publish
+        run: dotnet publish src/Web.Api/Web.Api.csproj -c Release -o ./publish --no-self-contained
+
+      - name: Package
+        run: |
+          cp efbundle publish/efbundle
+          test -f publish/Web.Api.dll || { echo "::error::Web.Api.dll missing"; exit 1; }
+          test -f publish/efbundle    || { echo "::error::efbundle missing"; exit 1; }
+          tar -czf api-release.tar.gz -C publish .
+          echo "Package: $(du -sh api-release.tar.gz | cut -f1)"
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t ed25519,rsa -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat > ~/.ssh/config << EOF
+          Host vps
+            HostName $VPS_HOST
+            User root
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 30
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Test SSH
+        run: ssh vps "echo 'SSH connection OK'"
+
+      - name: Upload
+        run: scp api-release.tar.gz vps:/tmp/api-release.tar.gz
+
+      - name: Validate secrets
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+        run: |
+          [ -z "$DB_PASSWORD" ] && { echo "::error::DB_PASSWORD not set"; exit 1; } || true
+          [ -z "$JWT_SECRET_KEY" ] && { echo "::error::JWT_SECRET_KEY not set"; exit 1; } || true
+          if [ ${#JWT_SECRET_KEY} -lt 32 ]; then echo "::error::JWT_SECRET_KEY must be >= 32 chars"; exit 1; fi
+          echo "Secrets OK"
+
+      - name: Deploy API
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_NAME: ${{ secrets.ADMIN_NAME }}
+        run: |
+          cat > /tmp/deploy.sh << ENDSSH
+          #!/bin/bash
+          set -euo pipefail
+          APP_DIR="/var/www/kessler-api"
+          SERVICE="kessler-api"
+          DB_NAME="kessler_production"
+          DB_USER="kessler_app"
+          DOMAIN="https://kessler.178-104-197-138.nip.io"
+
+          echo "--- Stop service ---"
+          systemctl stop \$SERVICE || true
+
+          echo "--- Backup ---"
+          [ -d "\$APP_DIR" ] && cp -a "\$APP_DIR" "\${APP_DIR}.backup.\$(date +%Y%m%d%H%M%S)"
+
+          echo "--- Extract (preserva .env, chaves, uploads) ---"
+          mkdir -p "\$APP_DIR"
+          cd "\$APP_DIR"
+          find . -maxdepth 1 -not -name '.' -not -name '.env' -not -name 'dataprotection-keys' -not -name 'uploads' -exec rm -rf {} +
+          tar -xzf /tmp/api-release.tar.gz
+          rm -f /tmp/api-release.tar.gz
+
+          echo "--- Validate ---"
+          test -f "\$APP_DIR/Web.Api.dll" || { echo "FATAL: Web.Api.dll missing"; exit 1; }
+
+          echo "--- .env ---"
+          cat > "\$APP_DIR/.env" << 'ENVEOF'
+          ASPNETCORE_ENVIRONMENT=Production
+          ASPNETCORE_URLS=http://127.0.0.1:5002
+          ConnectionStrings__Default=Host=localhost;Database=kessler_production;Username=kessler_app;Password=${DB_PASSWORD}
+          Jwt__Secret=${JWT_SECRET_KEY}
+          Jwt__Issuer=kessler-art
+          Jwt__Audience=kessler-art
+          Storage__RootPath=/var/www/kessler-api/uploads
+          Storage__PublicBaseUrl=https://kessler.178-104-197-138.nip.io/uploads
+          Cors__AllowedOrigins__0=https://kessler.178-104-197-138.nip.io
+          Admin__Email=${ADMIN_EMAIL}
+          Admin__Password=${ADMIN_PASSWORD}
+          Admin__Name=${ADMIN_NAME}
+          ENVEOF
+          chmod 600 "\$APP_DIR/.env"
+          chown www-data:www-data "\$APP_DIR/.env"
+
+          mkdir -p /etc/systemd/system/\${SERVICE}.service.d
+          cat > /etc/systemd/system/\${SERVICE}.service.d/env.conf << SVCEOF
+          [Service]
+          EnvironmentFile=/var/www/kessler-api/.env
+          SVCEOF
+          systemctl daemon-reload
+
+          echo "--- Migrations ---"
+          chmod +x "\$APP_DIR/efbundle"
+          "\$APP_DIR/efbundle" --connection "Host=localhost;Database=\$DB_NAME;Username=\$DB_USER;Password=${DB_PASSWORD}" || {
+            echo "FATAL: Migration failed. Rolling back."
+            systemctl start \$SERVICE 2>/dev/null || true
+            exit 1
+          }
+
+          echo "--- DB permissions safety net ---"
+          sudo -u postgres psql -d \$DB_NAME \
+            -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \$DB_USER;" \
+            -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \$DB_USER;" 2>/dev/null || true
+
+          echo "--- Permissions ---"
+          mkdir -p "\$APP_DIR/dataprotection-keys" "\$APP_DIR/uploads"
+          chown -R www-data:www-data "\$APP_DIR"
+          chmod -R 755 "\$APP_DIR"
+          chmod 700 "\$APP_DIR/dataprotection-keys"
+          chmod 600 "\$APP_DIR/.env"
+
+          echo "--- Start service ---"
+          systemctl start \$SERVICE
+          sleep 8
+
+          echo "--- Health check ---"
+          HTTP_CODE=\$(curl -sf -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:5002/health || echo "000")
+          if [ "\$HTTP_CODE" = "200" ]; then
+            echo "API: HTTP \$HTTP_CODE (OK)"
+          else
+            echo "FATAL: API health \$HTTP_CODE"
+            journalctl -u \$SERVICE --no-pager -n 50
+            exit 1
+          fi
+
+          ls -dt /var/www/kessler-api.backup.* 2>/dev/null | tail -n +4 | xargs rm -rf 2>/dev/null || true
+          echo "=== API deployment complete ==="
+          ENDSSH
+
+          scp /tmp/deploy.sh vps:/tmp/deploy.sh
+          ssh vps "chmod +x /tmp/deploy.sh && /tmp/deploy.sh && rm -f /tmp/deploy.sh"
+
+      - name: Smoke test
+        run: |
+          sleep 3
+          HTTP_CODE=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 15 "https://kessler.178-104-197-138.nip.io/health" || echo "000")
+          echo "API via nginx: HTTP $HTTP_CODE"
+          [ "$HTTP_CODE" = "200" ] && echo "Verified" || echo "::warning::API returned $HTTP_CODE"

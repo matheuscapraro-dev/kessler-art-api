@@ -39,9 +39,11 @@ public static class OrdersMapper
     public static CommissionDto ToDto(CommissionRequest c) => new(
         c.Id,
         c.Code,
-        c.Customer.Name,
-        c.Customer.Email,
-        c.Customer.Phone,
+        c.Type,
+        c.Title,
+        c.Customer?.Name,
+        c.Customer?.Email,
+        c.Customer?.Phone,
         c.Description,
         c.DesiredCategory,
         c.Colors,
@@ -50,16 +52,27 @@ public static class OrdersMapper
         c.ReferenceProductSlug,
         c.QuotedPrice,
         c.Status,
+        c.Priority,
+        c.Position,
         c.AdminNotes,
         c.CreatedAt,
-        c.ReferenceImages.Select(i => new CommissionImageDto(i.Id, i.Url)).ToList());
+        c.ReferenceImages.Select(i => new CommissionImageDto(i.Id, i.Url)).ToList(),
+        c.Tasks.OrderBy(t => t.Position).Select(t => new CommissionTaskDto(t.Id, t.Title, t.IsDone)).ToList());
 
     public static CommissionSummaryDto ToSummary(CommissionRequest c) => new(
         c.Id,
         c.Code,
-        c.Customer.Name,
+        c.Type,
+        c.Title,
+        c.Customer?.Name,
         c.Description,
         c.Status,
+        c.Priority,
+        c.Position,
         c.QuotedPrice,
+        c.DesiredDeadline,
+        c.Tasks.Count,
+        c.Tasks.Count(t => t.IsDone),
+        c.ReferenceImages.Count,
         c.CreatedAt);
 }

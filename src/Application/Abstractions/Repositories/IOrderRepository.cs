@@ -13,6 +13,7 @@ public interface IOrderRepository
 public interface ICommissionRepository
 {
     void Add(CommissionRequest commission);
+    void Remove(CommissionRequest commission);
     Task<CommissionRequest?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<CommissionRequest?> GetByCodeAsync(string code, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CommissionRequest>> ListAsync(CommissionStatus? status, CancellationToken cancellationToken = default);

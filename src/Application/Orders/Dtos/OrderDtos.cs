@@ -35,16 +35,20 @@ public sealed record OrderSummaryDto(
     int ItemCount,
     DateTime CreatedAt);
 
-// ── Encomendas sob medida ────────────────────────────────────────────
+// ── Encomendas / trabalhos do ateliê ─────────────────────────────────
 
 public sealed record CommissionImageDto(Guid Id, string Url);
+
+public sealed record CommissionTaskDto(Guid Id, string Title, bool IsDone);
 
 public sealed record CommissionDto(
     Guid Id,
     string Code,
-    string CustomerName,
-    string CustomerEmail,
-    string CustomerPhone,
+    WorkType Type,
+    string? Title,
+    string? CustomerName,
+    string? CustomerEmail,
+    string? CustomerPhone,
     string Description,
     string? DesiredCategory,
     string? Colors,
@@ -53,15 +57,26 @@ public sealed record CommissionDto(
     string? ReferenceProductSlug,
     decimal? QuotedPrice,
     CommissionStatus Status,
+    WorkPriority Priority,
+    double Position,
     string? AdminNotes,
     DateTime CreatedAt,
-    IReadOnlyList<CommissionImageDto> ReferenceImages);
+    IReadOnlyList<CommissionImageDto> ReferenceImages,
+    IReadOnlyList<CommissionTaskDto> Tasks);
 
 public sealed record CommissionSummaryDto(
     Guid Id,
     string Code,
-    string CustomerName,
+    WorkType Type,
+    string? Title,
+    string? CustomerName,
     string Description,
     CommissionStatus Status,
+    WorkPriority Priority,
+    double Position,
     decimal? QuotedPrice,
+    DateTime? DesiredDeadline,
+    int TaskCount,
+    int DoneTaskCount,
+    int ReferenceImageCount,
     DateTime CreatedAt);

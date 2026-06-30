@@ -56,13 +56,56 @@ public class CommissionTests
     public void SendQuote_SetsPriceAndStatus()
     {
         var commission = CommissionRequest.Create(
-            CustomerInfo.Create("Bia", "bia@email.com", "11999"),
-            "Quero um amigurumi de gato cinza, ~20cm.");
+            "Quero um amigurumi de gato cinza, ~20cm.",
+            CustomerInfo.Create("Bia", "bia@email.com", "11999"));
 
         commission.SendQuote(150m);
 
         Assert.Equal(150m, commission.QuotedPrice);
         Assert.Equal(CommissionStatus.OrcamentoEnviado, commission.Status);
         Assert.StartsWith("ENC-", commission.Code);
+    }
+
+    [Fact]
+    public void Create_PersonalProject_HasNoCustomer()
+    {
+        var work = CommissionRequest.Create(
+            "Amigurumi de coelho rosa para o estoque da loja.",
+            type: WorkType.Estoque,
+            title: "Coelho rosa");
+
+        Assert.Null(work.Customer);
+        Assert.Equal(WorkType.Estoque, work.Type);
+        Assert.Equal("Coelho rosa", work.Title);
+        Assert.Equal(WorkPriority.Normal, work.Priority);
+        Assert.Equal(CommissionStatus.Nova, work.Status);
+    }
+
+    [Fact]
+    public void SetTasks_ReplacesChecklist_AndIgnoresBlankTitles()
+    {
+        var work = CommissionRequest.Create("Manta de crochê grande para sofá.");
+
+        work.SetTasks([
+            new CommissionTaskInput("Comprar lã", true),
+            new CommissionTaskInput("   "),
+            new CommissionTaskInput("Fazer a base"),
+        ]);
+
+        Assert.Equal(2, work.Tasks.Count);
+        Assert.Equal("Comprar lã", work.Tasks[0].Title);
+        Assert.True(work.Tasks[0].IsDone);
+        Assert.False(work.Tasks[1].IsDone);
+    }
+
+    [Fact]
+    public void MoveTo_ChangesStatusAndPosition()
+    {
+        var work = CommissionRequest.Create("Touca de inverno feita à mão.");
+
+        work.MoveTo(CommissionStatus.EmProducao, 42);
+
+        Assert.Equal(CommissionStatus.EmProducao, work.Status);
+        Assert.Equal(42, work.Position);
     }
 }

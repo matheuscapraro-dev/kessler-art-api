@@ -29,19 +29,28 @@ internal sealed class CommissionRepository(KesslerDbContext db) : ICommissionRep
 {
     public void Add(CommissionRequest commission) => db.Commissions.Add(commission);
 
+    public void Remove(CommissionRequest commission) => db.Commissions.Remove(commission);
+
     public Task<CommissionRequest?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        db.Commissions.Include(c => c.ReferenceImages).FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+        db.Commissions.Include(c => c.ReferenceImages).Include(c => c.Tasks)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
 
     public Task<CommissionRequest?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
-        db.Commissions.AsNoTracking().Include(c => c.ReferenceImages)
+        db.Commissions.AsNoTracking().Include(c => c.ReferenceImages).Include(c => c.Tasks)
             .FirstOrDefaultAsync(c => c.Code == code, cancellationToken);
 
     public async Task<IReadOnlyList<CommissionRequest>> ListAsync(CommissionStatus? status, CancellationToken cancellationToken = default)
     {
-        var query = db.Commissions.AsNoTracking().AsQueryable();
+        var query = db.Commissions.AsNoTracking()
+            .Include(c => c.ReferenceImages)
+            .Include(c => c.Tasks)
+            .AsQueryable();
         if (status is { } s)
             query = query.Where(c => c.Status == s);
 
-        return await query.OrderByDescending(c => c.CreatedAt).ToListAsync(cancellationToken);
+        return await query
+            .OrderBy(c => c.Position)
+            .ThenByDescending(c => c.CreatedAt)
+            .ToListAsync(cancellationToken);
     }
 }

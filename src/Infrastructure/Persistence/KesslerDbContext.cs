@@ -1,6 +1,7 @@
 using Kessler.Application.Abstractions;
 using Kessler.Domain.Catalog;
 using Kessler.Domain.Common;
+using Kessler.Domain.Content;
 using Kessler.Domain.Identity;
 using Kessler.Domain.Orders;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public sealed class KesslerDbContext(DbContextOptions<KesslerDbContext> options)
     public DbSet<User> Users => Set<User>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<CommissionRequest> Commissions => Set<CommissionRequest>();
+    public DbSet<SiteContent> SiteContent => Set<SiteContent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
